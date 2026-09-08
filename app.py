@@ -124,6 +124,18 @@ if "bill" in st.session_state:
             )
         else:
             st.info(f"Calculated total: {bill.currency} {bill.calculated_total:.2f}")
+        if bill.printed_subtotal is not None and bill.printed_subtotal != bill.item_subtotal:
+            st.warning(
+                f"Printed subtotal: {bill.currency} {bill.printed_subtotal:.2f}. "
+                f"Sum of reviewed items: {bill.currency} {bill.item_subtotal:.2f}. "
+                f"Tax allocation uses the reviewed item sum."
+            )
+        st.caption(
+            f"Reconciliation: items {bill.currency} {bill.item_subtotal:.2f} "
+            f"+ tax {bill.currency} {bill.tax:.2f} "
+            f"+ service charge {bill.currency} {bill.service_charge:.2f} "
+            f"- discount {bill.currency} {bill.discount:.2f}"
+        )
         st.subheader("What each person owes")
         for person, values in breakdown.items():
             st.metric(person, f"{bill.currency} {values['total']:.2f}")
