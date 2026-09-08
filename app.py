@@ -88,6 +88,7 @@ if uploaded and st.button("Read bill", type="primary"):
         text, confidence = extract_text(image_path)
         st.session_state.bill = parse_ocr_text(text, confidence)
         st.session_state.raw_ocr = text
+        st.session_state.pop("breakdown", None)
     except (FileNotFoundError, ValueError) as error:
         st.error(str(error))
 
@@ -98,7 +99,12 @@ if "bill" in st.session_state:
     if reviewed_result:
         bill, people = reviewed_result
         st.session_state.bill = bill
-        breakdown = calculate_breakdown(bill, people)
+        st.session_state.breakdown = calculate_breakdown(bill, people)
+        st.session_state.people = people
+
+    if "breakdown" in st.session_state:
+        bill = st.session_state.bill
+        breakdown = st.session_state.breakdown
         st.success("Review confirmed. The calculation uses consumption-weighted charges.")
         if bill.total_mismatch is not None and bill.total_mismatch != 0:
             st.warning(f"Printed total differs from calculated total by {bill.total_mismatch:.2f}.")
