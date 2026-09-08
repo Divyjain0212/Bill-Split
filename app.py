@@ -84,8 +84,12 @@ def review_panel(bill: Bill) -> tuple[Bill, list[str]] | None:
 st.title("Bill Split")
 st.write("Photograph the bill, review what was read, then assign each item.")
 uploaded = st.file_uploader("Upload a bill photograph", type=["jpg", "jpeg", "png", "webp"])
+if st.button("Clear current extraction"):
+    for key in ("bill", "raw_ocr", "breakdown", "people"):
+        st.session_state.pop(key, None)
+    st.rerun()
 
-if uploaded and st.button("Read bill", type="primary"):
+if uploaded and st.button("Read / replace bill", type="primary"):
     suffix = Path(uploaded.name).suffix or ".jpg"
     with NamedTemporaryFile(delete=False, suffix=suffix) as temporary_file:
         temporary_file.write(uploaded.getvalue())
