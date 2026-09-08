@@ -47,6 +47,7 @@ class LineItem(BaseModel):
 
 class Bill(BaseModel):
     currency: str = "INR"
+    guest_count: int | None = Field(default=None, ge=1)
     line_items: list[LineItem] = Field(min_length=1)
     tax: Decimal = Field(default=Decimal("0"), ge=0)
     service_charge: Decimal = Field(default=Decimal("0"), ge=0)

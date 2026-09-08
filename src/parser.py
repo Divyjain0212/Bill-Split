@@ -5,8 +5,9 @@ from decimal import Decimal
 
 from .models import Bill, FieldConfidence, LineItem
 
-MONEY = r"(?:\d+[,.]?\d*)"
+MONEY = r"(?:[$€£₹]?\s*\d[\d,]*(?:\.\d+)?)"
 SUMMARY_PATTERNS = {
+    "guest_count": re.compile(r"\bguests?\b\D*(\d+)", re.IGNORECASE),
     "printed_subtotal": re.compile(rf"\bsub\s*total\b\D*({MONEY})", re.IGNORECASE),
     "tax": re.compile(rf"\b(?:gst|tax|vat)\b\D*({MONEY})", re.IGNORECASE),
     "service_charge": re.compile(rf"\bservice\s*charge\b\D*({MONEY})", re.IGNORECASE),
@@ -17,11 +18,11 @@ ITEM_PATTERN = re.compile(rf"^(.+?)\s+(?:(\d+(?:\.\d+)?)\s*[xX*]\s*)?({MONEY})$"
 
 
 def _amount(value: str) -> Decimal:
-    return Decimal(value.replace(",", ""))
+    return Decimal(re.sub(r"[^\d.]", "", value.replace(",", "")))
 
 
 def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
-    summaries: dict[str, Decimal] = {}
+    summaries: dict[str, Decimal | int] = {}
     lines: list[LineItem] = []
     confidence_fields: dict[str, FieldConfidence] = {}
 
@@ -33,8 +34,9 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
         for field_name, pattern in SUMMARY_PATTERNS.items():
             match = pattern.search(line)
             if match:
-                summaries[field_name] = _amount(match.group(1))
-                confidence_fields[field_name] = FieldConfidence(value=summaries[field_name], score=confidence)
+                value = int(match.group(1)) if field_name == "guest_count" else _amount(match.group(1))
+                summaries[field_name] = value
+                confidence_fields[field_name] = FieldConfidence(value=value, score=confidence)
                 matched_summary = True
                 break
         if matched_summary:
@@ -46,12 +48,12 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
             item = LineItem(
                 name=name.strip(),
                 quantity=quantity_value,
-                unit_price=_amount(unit_price),
+                unit_price=_amount(unit_price) / quantity_value,
                 assigned_to=["Unassigned"],
                 confidence={
                     "name": FieldConfidence(value=name.strip(), score=confidence),
                     "quantity": FieldConfidence(value=quantity_value, score=confidence),
-                    "unit_price": FieldConfidence(value=_amount(unit_price), score=confidence),
+                    "unit_price": FieldConfidence(value=_amount(unit_price) / quantity_value, score=confidence),
                 },
             )
             lines.append(item)

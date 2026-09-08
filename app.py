@@ -21,9 +21,15 @@ def money_input(label: str, value: Decimal) -> Decimal:
 def review_panel(bill: Bill) -> tuple[Bill, list[str]] | None:
     st.subheader("Review extracted bill")
     st.caption("Correct OCR fields and assign every item before confirming the bill.")
-    people = [name.strip() for name in st.text_input("Members", value="Asha, Ben, Cara").split(",") if name.strip()]
-    if not people:
-        st.warning("Add at least one member.")
+    detected_people = bill.guest_count or 2
+    guest_count = int(st.number_input("Number of people", min_value=1, value=detected_people, step=1))
+    st.info(f"Receipt indicates {bill.guest_count or 'an unknown number of'} guest(s). Enter the names below.")
+    people = [
+        st.text_input(f"Person {index + 1} name", value=f"Person {index + 1}", key=f"member_{index}").strip()
+        for index in range(guest_count)
+    ]
+    if any(not name for name in people) or len(set(people)) != len(people):
+        st.warning("Enter a different name for every person before confirming.")
         return None
 
     with st.form("review_bill"):
