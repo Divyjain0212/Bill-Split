@@ -1,0 +1,6 @@
+streamlit>=1.40,<2
+pydantic>=2.9,<3
+pytesseract>=0.3.13,<1
+pillow>=10.4,<12
+opencv-python-headless>=4.10,<5
+pytest>=8.3,<9

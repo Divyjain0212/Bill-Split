@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.streamlit/secrets.toml
+data/bills/*
+!data/bills/.gitkeep
+data/ground_truth/*
+!data/ground_truth/.gitkeep
