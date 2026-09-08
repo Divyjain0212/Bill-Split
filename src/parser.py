@@ -87,4 +87,5 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
 
     if not lines:
         raise ValueError("No line items could be identified in the OCR text")
-    return Bill(line_items=lines, confidence=confidence_fields, **summaries)
+    currency = "USD" if "$" in text else "INR" if "₹" in text else "EUR" if "€" in text else "GBP" if "£" in text else "INR"
+    return Bill(currency=currency, line_items=lines, confidence=confidence_fields, **summaries)

@@ -10,9 +10,11 @@ def test_parser_creates_unconfirmed_bill_from_receipt_text():
     )
 
     assert bill.review_confirmed is False
+    assert bill.currency == "USD"
     assert bill.line_items[0].subtotal == Decimal("600")
     assert bill.line_items[1].unit_price == Decimal("80")
     assert bill.guest_count == 2
+    assert bill.currency == "USD"
     assert bill.tax == Decimal("34")
     assert bill.service_charge == Decimal("20")
     assert bill.printed_total == Decimal("734")

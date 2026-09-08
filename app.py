@@ -117,7 +117,13 @@ if "bill" in st.session_state:
         breakdown = st.session_state.breakdown
         st.success("Review confirmed. The calculation uses consumption-weighted charges.")
         if bill.total_mismatch is not None and bill.total_mismatch != 0:
-            st.warning(f"Printed total differs from calculated total by {bill.total_mismatch:.2f}.")
+            st.warning(
+                f"Printed total: {bill.currency} {bill.printed_total:.2f}. "
+                f"Calculated total from items and tax: {bill.currency} {bill.calculated_total:.2f}. "
+                f"Difference: {bill.currency} {bill.total_mismatch:.2f}."
+            )
+        else:
+            st.info(f"Calculated total: {bill.currency} {bill.calculated_total:.2f}")
         st.subheader("What each person owes")
         for person, values in breakdown.items():
             st.metric(person, f"{bill.currency} {values['total']:.2f}")
