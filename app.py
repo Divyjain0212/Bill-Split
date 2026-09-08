@@ -57,12 +57,16 @@ def review_panel(bill: Bill, extraction_id: int) -> tuple[Bill, list[str]] | Non
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            tax = money_input("GST / tax", bill.tax, key="tax")
+            tax = money_input("GST / tax", bill.tax, key=f"tax_{extraction_id}")
         with col2:
-            service_charge = money_input("Service charge", bill.service_charge, key="service_charge")
+            service_charge = money_input("Service charge", bill.service_charge, key=f"service_charge_{extraction_id}")
         with col3:
-            discount = money_input("Discount", bill.discount, key="discount")
-        printed_total = money_input("Printed total", bill.printed_total or bill.calculated_total, key="printed_total")
+            discount = money_input("Discount", bill.discount, key=f"discount_{extraction_id}")
+        printed_total = money_input(
+            "Printed total",
+            bill.printed_total or bill.calculated_total,
+            key=f"printed_total_{extraction_id}",
+        )
         confirmed = st.form_submit_button("Confirm review and calculate", type="primary")
 
     if not confirmed:
