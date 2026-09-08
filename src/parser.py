@@ -32,6 +32,14 @@ def _amount(value: str) -> Decimal:
     return Decimal(re.sub(r"[^\d.]", "", value.replace(",", "")))
 
 
+def _inr_candidates(value: Decimal) -> list[Decimal]:
+    text = str(value)
+    candidates = [value]
+    if len(text.split(".", 1)[0]) >= 3 and text[0].isdigit():
+        candidates.append(Decimal(text[1:]))
+    return list(dict.fromkeys(candidates))
+
+
 def _table_amounts(raw_values: list[str], currency: str, quantity: Decimal) -> tuple[Decimal, Decimal]:
     values = [_amount(value) for value in raw_values]
     corrected = [
@@ -166,6 +174,71 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
     if not lines:
         raise ValueError("No line items could be identified in the OCR text")
     printed_subtotal = summaries.get("printed_subtotal")
+    printed_total = summaries.get("printed_total")
+    if currency == "INR" and isinstance(printed_subtotal, Decimal):
+        suspicious = [
+            (index, item)
+            for index, item in enumerate(lines)
+            if item.subtotal >= Decimal("1000")
+        ]
+        if len(suspicious) == 1:
+            suspicious_index, suspicious_item = suspicious[0]
+            known_subtotal = sum(
+                item.subtotal for index, item in enumerate(lines) if index != suspicious_index
+            )
+            subtotal_candidates = [
+                candidate for candidate in _inr_candidates(printed_subtotal)
+                if candidate >= known_subtotal and candidate - known_subtotal < Decimal("1000")
+            ]
+            if subtotal_candidates:
+                normalized_subtotal = min(subtotal_candidates)
+                suspicious_item.unit_price = (
+                    normalized_subtotal - known_subtotal
+                ) / suspicious_item.quantity
+                summaries["printed_subtotal"] = normalized_subtotal
+                printed_subtotal = normalized_subtotal
+                tax_candidates = [Decimal("0")]
+                for component in tax_components:
+                    tax_candidates = [
+                        current + candidate
+                        for current in tax_candidates
+                        for candidate in _inr_candidates(component)
+                    ]
+                if isinstance(printed_total, Decimal):
+                    total_candidates = _inr_candidates(printed_total)
+                    matching_tax = [
+                        tax for tax in tax_candidates
+                        if any(total == normalized_subtotal + tax for total in total_candidates)
+                    ]
+                    if matching_tax:
+                        summaries["tax"] = min(matching_tax)
+                        summaries["printed_total"] = normalized_subtotal + min(matching_tax)
+                        printed_total = summaries["printed_total"]
+    if currency == "INR" and isinstance(printed_subtotal, Decimal) and isinstance(printed_total, Decimal):
+        known_subtotal = sum(
+            item.subtotal for index, item in enumerate(lines) if index not in incomplete_table_indices
+        )
+        tax_candidates = [Decimal("0")]
+        for component in tax_components:
+            tax_candidates = [
+                current + candidate
+                for current in tax_candidates
+                for candidate in _inr_candidates(component)
+            ]
+        consistent_values = [
+            (subtotal, total, tax)
+            for subtotal in _inr_candidates(printed_subtotal)
+            for total in _inr_candidates(printed_total)
+            for tax in tax_candidates
+            if subtotal >= known_subtotal
+            and total == subtotal + tax
+        ]
+        if consistent_values:
+            normalized_subtotal, normalized_total, normalized_tax = consistent_values[0]
+            summaries["printed_subtotal"] = normalized_subtotal
+            summaries["printed_total"] = normalized_total
+            summaries["tax"] = normalized_tax
+            printed_subtotal = normalized_subtotal
     if printed_subtotal is not None and len(incomplete_table_indices) == 1:
         incomplete_index = incomplete_table_indices[0]
         known_subtotal = sum(
@@ -191,4 +264,37 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
         ]
         if sum(corrected_components, Decimal("0")) == expected_tax:
             summaries["tax"] = expected_tax
+    if currency == "INR" and isinstance(summaries.get("printed_subtotal"), Decimal):
+        suspicious = [(index, item) for index, item in enumerate(lines) if item.subtotal >= Decimal("1000")]
+        if len(suspicious) == 1:
+            suspicious_index, suspicious_item = suspicious[0]
+            known_subtotal = sum(
+                item.subtotal for index, item in enumerate(lines) if index != suspicious_index
+            )
+            subtotal_candidates = [
+                candidate for candidate in _inr_candidates(summaries["printed_subtotal"])
+                if candidate >= known_subtotal and candidate - known_subtotal < Decimal("1000")
+            ]
+            if subtotal_candidates:
+                normalized_subtotal = min(subtotal_candidates)
+                suspicious_item.unit_price = (
+                    normalized_subtotal - known_subtotal
+                ) / suspicious_item.quantity
+                summaries["printed_subtotal"] = normalized_subtotal
+                if tax_components:
+                    tax_candidates = [Decimal("0")]
+                    for component in tax_components:
+                        tax_candidates = [
+                            current + candidate
+                            for current in tax_candidates
+                            for candidate in _inr_candidates(component)
+                        ]
+                    total_candidates = _inr_candidates(summaries.get("printed_total", Decimal("0")))
+                    matching_tax = [
+                        tax for tax in tax_candidates
+                        if any(total == normalized_subtotal + tax for total in total_candidates)
+                    ]
+                    if matching_tax:
+                        summaries["tax"] = min(matching_tax)
+                        summaries["printed_total"] = normalized_subtotal + min(matching_tax)
     return Bill(currency=currency, line_items=lines, confidence=confidence_fields, **summaries)
