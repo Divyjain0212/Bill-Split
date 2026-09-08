@@ -8,6 +8,8 @@ Bill Split turns a bill photograph into a reviewed, structured bill and calculat
 - Proportional allocation of tax and service charge based on assigned item subtotals
 - Validation for incorrect printed totals
 - Focused calculator tests
+- Tesseract preprocessing and OCR text parsing
+- Streamlit upload, review, assignment, and result workflow
 
 ## Local setup
 
@@ -27,4 +29,8 @@ Bill Split turns a bill photograph into a reviewed, structured bill and calculat
    pytest
    ```
 
-The application UI and OCR pipeline will be added in the next milestone.
+Run the application:
+
+```powershell
+streamlit run app.py
+```
