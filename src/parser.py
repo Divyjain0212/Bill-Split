@@ -14,11 +14,22 @@ SUMMARY_PATTERNS = {
     "discount": re.compile(rf"\bdiscount\b\D*({MONEY})", re.IGNORECASE),
     "printed_total": re.compile(rf"\b(?:grand\s*)?total\b\D*({MONEY})", re.IGNORECASE),
 }
-ITEM_PATTERN = re.compile(rf"^(.+?)\s+(?:(\d+(?:\.\d+)?)\s*[xX*]\s*)?({MONEY})$")
+UNIT_PRICE_PATTERN = re.compile(rf"^(.+?)\s+(\d+(?:\.\d+)?)\s*[xX*]\s*({MONEY})$")
+LINE_TOTAL_PATTERN = re.compile(rf"^(?:(\d+(?:\.\d+)?)\s*[xX*]\s+)?(.+?)\s+({MONEY})$")
+ITEM_STOP_WORDS = re.compile(
+    r"^(?:subtotal|sub total|tax|gst|vat|total|grand total|discount|service charge)\b",
+    re.IGNORECASE,
+)
 
 
 def _amount(value: str) -> Decimal:
     return Decimal(re.sub(r"[^\d.]", "", value.replace(",", "")))
+
+
+def _is_item_candidate(line: str) -> bool:
+    if ":" in line or "/" in line or re.search(r"\b(?:phone|receipt|table|server|card|type|entry|time|ref|status|tip|thank|please|www)\b", line, re.IGNORECASE):
+        return False
+    return bool(re.search(r"[A-Za-z]{2,}", line))
 
 
 def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
@@ -41,22 +52,38 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
                 break
         if matched_summary:
             continue
-        item_match = ITEM_PATTERN.match(line)
-        if item_match and not re.search(r"receipt|invoice|bill|date|phone|thank", line, re.IGNORECASE):
-            name, quantity, unit_price = item_match.groups()
+        if ITEM_STOP_WORDS.match(line):
+            continue
+        if not _is_item_candidate(line):
+            continue
+
+        unit_price_match = UNIT_PRICE_PATTERN.match(line)
+        if unit_price_match:
+            name, quantity, amount = unit_price_match.groups()
+            quantity_value = Decimal(quantity)
+            unit_price = _amount(amount)
+        else:
+            line_total_match = LINE_TOTAL_PATTERN.match(line)
+            if not line_total_match:
+                continue
+            quantity, name, amount = line_total_match.groups()
             quantity_value = Decimal(quantity or "1")
-            item = LineItem(
-                name=name.strip(),
-                quantity=quantity_value,
-                unit_price=_amount(unit_price) / quantity_value,
-                assigned_to=["Unassigned"],
-                confidence={
-                    "name": FieldConfidence(value=name.strip(), score=confidence),
-                    "quantity": FieldConfidence(value=quantity_value, score=confidence),
-                    "unit_price": FieldConfidence(value=_amount(unit_price) / quantity_value, score=confidence),
-                },
-            )
-            lines.append(item)
+            unit_price = _amount(amount) / quantity_value
+
+        if not name.strip():
+            continue
+        item = LineItem(
+            name=name.strip(),
+            quantity=quantity_value,
+            unit_price=unit_price,
+            assigned_to=["Unassigned"],
+            confidence={
+                "name": FieldConfidence(value=name.strip(), score=confidence),
+                "quantity": FieldConfidence(value=quantity_value, score=confidence),
+                "unit_price": FieldConfidence(value=unit_price, score=confidence),
+            },
+        )
+        lines.append(item)
 
     if not lines:
         raise ValueError("No line items could be identified in the OCR text")

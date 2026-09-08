@@ -10,7 +10,7 @@ def test_parser_creates_unconfirmed_bill_from_receipt_text():
     )
 
     assert bill.review_confirmed is False
-    assert bill.line_items[0].subtotal == Decimal("300")
+    assert bill.line_items[0].subtotal == Decimal("600")
     assert bill.line_items[1].unit_price == Decimal("80")
     assert bill.guest_count == 2
     assert bill.tax == Decimal("34")
@@ -35,3 +35,9 @@ def test_restaurant_receipt_detects_two_guests_and_wrong_total():
     assert len(bill.line_items) == 4
     assert bill.item_subtotal == Decimal("59.50")
     assert bill.total_mismatch == Decimal("-12.00")
+    assert [(item.name, item.quantity, item.unit_price) for item in bill.line_items] == [
+        ("CAESAR SALAD", Decimal("2"), Decimal("12.00")),
+        ("GRILLED SALMON", Decimal("1"), Decimal("22.00")),
+        ("CHEESECAKE", Decimal("1"), Decimal("7.50")),
+        ("SPARKLING WATER", Decimal("2"), Decimal("3.00")),
+    ]
