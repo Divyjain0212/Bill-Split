@@ -6,7 +6,7 @@ from tempfile import NamedTemporaryFile
 
 import streamlit as st
 
-from src.calculator import calculate_shares
+from src.calculator import calculate_breakdown
 from src.models import AssignmentMode, Bill, LineItem
 from src.ocr import extract_text
 from src.parser import parse_ocr_text
@@ -98,15 +98,25 @@ if "bill" in st.session_state:
     if reviewed_result:
         bill, people = reviewed_result
         st.session_state.bill = bill
-        shares = calculate_shares(bill, people)
+        breakdown = calculate_breakdown(bill, people)
         st.success("Review confirmed. The calculation uses consumption-weighted charges.")
         if bill.total_mismatch is not None and bill.total_mismatch != 0:
             st.warning(f"Printed total differs from calculated total by {bill.total_mismatch:.2f}.")
         st.subheader("What each person owes")
-        for person, amount in shares.items():
-            st.metric(person, f"{bill.currency} {amount:.2f}")
+        for person, values in breakdown.items():
+            st.metric(person, f"{bill.currency} {values['total']:.2f}")
         st.dataframe(
-            [{"Person": person, "Amount": str(amount), "Share of bill": f"{amount / bill.calculated_total:.1%}"} for person, amount in shares.items()],
+            [
+                {
+                    "Person": person,
+                    "Items": f"{values['subtotal']:.2f}",
+                    "GST / tax": f"{values['tax']:.2f}",
+                    "Service charge": f"{values['service_charge']:.2f}",
+                    "Discount": f"-{values['discount']:.2f}",
+                    "Total": f"{values['total']:.2f}",
+                }
+                for person, values in breakdown.items()
+            ],
             hide_index=True,
             use_container_width=True,
         )

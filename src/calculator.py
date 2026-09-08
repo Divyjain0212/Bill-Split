@@ -12,8 +12,16 @@ def _money(value: Decimal) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
-def calculate_shares(bill: Bill, people: list[str]) -> dict[str, Decimal]:
-    """Calculate each person's share after proportional tax and service charge."""
+def _allocate(values: dict[str, Decimal], total: Decimal, people: list[str]) -> dict[str, Decimal]:
+    allocated = {person: _money(values[person]) for person in people}
+    difference = _money(total) - sum(allocated.values(), Decimal("0"))
+    if people:
+        allocated[people[-1]] += difference
+    return allocated
+
+
+def calculate_breakdown(bill: Bill, people: list[str]) -> dict[str, dict[str, Decimal]]:
+    """Calculate each person's consumption-weighted bill breakdown."""
     if not people:
         raise ValueError("At least one person is required")
     if not bill.review_confirmed:
@@ -34,13 +42,30 @@ def calculate_shares(bill: Bill, people: list[str]) -> dict[str, Decimal]:
     if assigned_subtotal <= 0:
         raise ValueError("Assigned subtotal must be greater than zero")
 
-    result: dict[str, Decimal] = {}
+    proportions = {person: base_by_person[person] / assigned_subtotal for person in people}
+    base = _allocate(base_by_person, assigned_subtotal, people)
+    tax = _allocate({person: bill.tax * proportions[person] for person in people}, bill.tax, people)
+    service_charge = _allocate(
+        {person: bill.service_charge * proportions[person] for person in people},
+        bill.service_charge,
+        people,
+    )
+    discount = _allocate({person: bill.discount * proportions[person] for person in people}, bill.discount, people)
+    return {
+        person: {
+            "subtotal": base[person],
+            "tax": tax[person],
+            "service_charge": service_charge[person],
+            "discount": discount[person],
+            "total": base[person] + tax[person] + service_charge[person] - discount[person],
+        }
+        for person in people
+    }
+
+
+def calculate_shares(bill: Bill, people: list[str]) -> dict[str, Decimal]:
+    """Calculate only each person's final amount."""
+    breakdown = calculate_breakdown(bill, people)
     for person in people:
-        proportion = base_by_person[person] / assigned_subtotal
-        result[person] = _money(
-            base_by_person[person]
-            + bill.tax * proportion
-            + bill.service_charge * proportion
-            - bill.discount * proportion
-        )
-    return result
+        breakdown[person]["total"] = _money(breakdown[person]["total"])
+    return {person: values["total"] for person, values in breakdown.items()}

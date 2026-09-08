@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from src.calculator import calculate_shares
+from src.calculator import calculate_breakdown, calculate_shares
 from src.models import AssignmentMode, Bill, LineItem
 
 
@@ -37,6 +37,15 @@ def test_everyone_item_is_split_across_all_people():
     shares = calculate_shares(bill, ["Asha", "Ben", "Cara", "Dev"])
 
     assert sum(shares.values(), Decimal("0")) == Decimal("920.00")
+
+
+def test_breakdown_reconciles_each_charge_to_the_bill():
+    breakdown = calculate_breakdown(reviewed_bill(), ["Asha", "Ben", "Cara", "Dev"])
+
+    assert sum(row["subtotal"] for row in breakdown.values()) == Decimal("800.00")
+    assert sum(row["tax"] for row in breakdown.values()) == Decimal("80.00")
+    assert sum(row["service_charge"] for row in breakdown.values()) == Decimal("40.00")
+    assert sum(row["total"] for row in breakdown.values()) == Decimal("920.00")
 
 
 def test_calculation_requires_review_confirmation():
