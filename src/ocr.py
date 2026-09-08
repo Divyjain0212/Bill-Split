@@ -33,8 +33,12 @@ def preprocess_image(image_path: str | Path):
 def extract_text(image_path: str | Path) -> tuple[str, float]:
     configure_tesseract()
     processed = preprocess_image(image_path)
+    text = pytesseract.image_to_string(processed, config="--psm 6")
     data = pytesseract.image_to_data(processed, output_type=Output.DICT, config="--psm 6")
-    words = [text.strip() for text in data["text"] if text.strip()]
-    confidences = [float(value) for value, text in zip(data["conf"], data["text"]) if text.strip() and float(value) >= 0]
+    confidences = [
+        float(value)
+        for value, word in zip(data["conf"], data["text"])
+        if word.strip() and float(value) >= 0
+    ]
     average_confidence = sum(confidences) / len(confidences) / 100 if confidences else 0.0
-    return " ".join(words), average_confidence
+    return text, average_confidence
