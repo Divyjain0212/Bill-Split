@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from .models import Bill, FieldConfidence, LineItem
 
-MONEY = r"(?:[$€£₹]?\s*\d[\d,]*(?:\.\d+)?)"
+MONEY = r"(?:(?:[$€£₹]|Rs\.?|INR|USD|EUR|GBP)?\s*\d[\d,]*(?:\.\d+)?)"
 SUMMARY_PATTERNS = {
     "guest_count": re.compile(r"\bguests?\b\D*(\d+)", re.IGNORECASE),
     "printed_subtotal": re.compile(rf"\bsub\s*total\b\D*({MONEY})", re.IGNORECASE),
@@ -14,8 +14,12 @@ SUMMARY_PATTERNS = {
     "discount": re.compile(rf"\bdiscount\b\D*({MONEY})", re.IGNORECASE),
     "printed_total": re.compile(rf"\b(?:grand\s*)?total\b\D*({MONEY})", re.IGNORECASE),
 }
+TAX_LABEL_PATTERN = re.compile(r"\b(?:cgst|sgst|igst|gst|tax|vat)\b", re.IGNORECASE)
 UNIT_PRICE_PATTERN = re.compile(rf"^(.+?)\s+(\d+(?:\.\d+)?)\s*[xX*]\s*({MONEY})$")
 LINE_TOTAL_PATTERN = re.compile(rf"^(?:(\d+(?:\.\d+)?)\s*[xX*]\s+)?(.+?)\s+({MONEY})$")
+TABLE_ITEM_PATTERN = re.compile(
+    rf"^(?:\d+[.)]?\s*)?(.+?)\s+(\d+(?:\.\d+)?)\s+({MONEY})\s+({MONEY})$"
+)
 ITEM_STOP_WORDS = re.compile(
     r"^(?:subtotal|sub total|tax|gst|vat|total|grand total|discount|service charge)\b",
     re.IGNORECASE,
@@ -24,6 +28,18 @@ ITEM_STOP_WORDS = re.compile(
 
 def _amount(value: str) -> Decimal:
     return Decimal(re.sub(r"[^\d.]", "", value.replace(",", "")))
+
+
+def _currency(text: str) -> str:
+    if re.search(r"\$|\b(?:USD|US\$)\b", text, re.IGNORECASE):
+        return "USD"
+    if re.search(r"€|\bEUR\b", text, re.IGNORECASE):
+        return "EUR"
+    if re.search(r"£|\bGBP\b", text, re.IGNORECASE):
+        return "GBP"
+    if re.search(r"₹|\b(?:INR|RS)\.?\b", text, re.IGNORECASE):
+        return "INR"
+    return "INR"
 
 
 def _is_item_candidate(line: str) -> bool:
@@ -41,8 +57,19 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
         line = " ".join(raw_line.split()).strip()
         if not line:
             continue
+        if TAX_LABEL_PATTERN.search(line):
+            tax_values = re.findall(MONEY, line)
+            if not tax_values:
+                continue
+            tax_amount = _amount(tax_values[-1])
+            summaries["tax"] = summaries.get("tax", Decimal("0")) + tax_amount
+            confidence_fields["tax"] = FieldConfidence(value=summaries["tax"], score=confidence)
+            continue
+
         matched_summary = False
         for field_name, pattern in SUMMARY_PATTERNS.items():
+            if field_name == "tax":
+                continue
             match = pattern.search(line)
             if match:
                 value = int(match.group(1)) if field_name == "guest_count" else _amount(match.group(1))
@@ -57,18 +84,27 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
         if not _is_item_candidate(line):
             continue
 
-        unit_price_match = UNIT_PRICE_PATTERN.match(line)
-        if unit_price_match:
-            name, quantity, amount = unit_price_match.groups()
+        table_match = TABLE_ITEM_PATTERN.match(line)
+        if table_match:
+            name, quantity, unit_price_text, total_text = table_match.groups()
             quantity_value = Decimal(quantity)
-            unit_price = _amount(amount)
+            unit_price = _amount(unit_price_text)
+            line_total = _amount(total_text)
+            if quantity_value * unit_price != line_total:
+                unit_price = line_total / quantity_value
         else:
-            line_total_match = LINE_TOTAL_PATTERN.match(line)
-            if not line_total_match:
-                continue
-            quantity, name, amount = line_total_match.groups()
-            quantity_value = Decimal(quantity or "1")
-            unit_price = _amount(amount) / quantity_value
+            unit_price_match = UNIT_PRICE_PATTERN.match(line)
+            if unit_price_match:
+                name, quantity, amount = unit_price_match.groups()
+                quantity_value = Decimal(quantity)
+                unit_price = _amount(amount)
+            else:
+                line_total_match = LINE_TOTAL_PATTERN.match(line)
+                if not line_total_match:
+                    continue
+                quantity, name, amount = line_total_match.groups()
+                quantity_value = Decimal(quantity or "1")
+                unit_price = _amount(amount) / quantity_value
 
         if not name.strip():
             continue
@@ -87,5 +123,4 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
 
     if not lines:
         raise ValueError("No line items could be identified in the OCR text")
-    currency = "USD" if "$" in text else "INR" if "₹" in text else "EUR" if "€" in text else "GBP" if "£" in text else "INR"
-    return Bill(currency=currency, line_items=lines, confidence=confidence_fields, **summaries)
+    return Bill(currency=_currency(text), line_items=lines, confidence=confidence_fields, **summaries)
