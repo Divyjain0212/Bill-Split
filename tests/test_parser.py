@@ -109,3 +109,24 @@ def test_indian_ocr_merged_tax_marker_reconciles_with_grand_total():
     assert bill.item_subtotal == Decimal("674.00")
     assert bill.tax == Decimal("33.70")
     assert bill.calculated_total == Decimal("707.70")
+
+
+def test_indian_ocr_single_merged_gulab_jamun_amount_and_tax():
+    bill = parse_ocr_text(
+        "ITEM QTY UNIT TOTAL\n"
+        "1. Masala Dosa 1 149.00 149.00\n"
+        "2. Paneer Roll 1 249.00 249.00\n"
+        "3. Tea 2 49.00 98.00\n"
+        "4. Gulab Jamun 2 1089.04\n"
+        "SUBTOTAL 674.00\n"
+        "CGST (2.5%) 216.85\n"
+        "SGST (2.5%) 216.85\n"
+        "GRAND TOTAL 707.70"
+    )
+
+    gulab_jamun = bill.line_items[-1]
+    assert gulab_jamun.name == "Gulab Jamun"
+    assert gulab_jamun.quantity == Decimal("2")
+    assert gulab_jamun.unit_price == Decimal("89.00")
+    assert bill.tax == Decimal("33.70")
+    assert bill.calculated_total == Decimal("707.70")

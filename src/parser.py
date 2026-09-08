@@ -35,7 +35,7 @@ def _amount(value: str) -> Decimal:
 def _table_amounts(raw_values: list[str], currency: str, quantity: Decimal) -> tuple[Decimal, Decimal]:
     values = [_amount(value) for value in raw_values]
     corrected = [
-        value[1:] if currency == "INR" and value[:1] in "3456789" and len(value.split(".", 1)[0]) >= 3 else value
+        value[1:] if currency == "INR" and value[:1].isdigit() and len(value.split(".", 1)[0]) >= 3 else value
         for value in raw_values
     ]
     corrected_values = [_amount(value) for value in corrected]
@@ -72,6 +72,7 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
     lines: list[LineItem] = []
     confidence_fields: dict[str, FieldConfidence] = {}
     tax_components: list[Decimal] = []
+    incomplete_table_indices: list[int] = []
     currency = _currency(text)
     table_mode = False
 
@@ -112,6 +113,7 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
 
         table_match = TABLE_ITEM_PATTERN.match(line) if table_mode else None
         table_fields: tuple[str, str, str, str] | None = None
+        incomplete_table = False
         if table_mode and table_match:
             table_fields = table_match.groups()
         if table_mode and not table_match:
@@ -123,6 +125,7 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
                     quantity_value = Decimal(quantity_text)
                     unit_price, line_total = _table_amounts(raw_values, currency, quantity_value)
                     table_fields = (name, quantity_text, str(unit_price), str(line_total))
+                    incomplete_table = len(raw_values) == 1
         if table_fields:
             name, quantity, unit_price_text, total_text = table_fields
             quantity_value = Decimal(quantity)
@@ -157,9 +160,21 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
             },
         )
         lines.append(item)
+        if incomplete_table:
+            incomplete_table_indices.append(len(lines) - 1)
 
     if not lines:
         raise ValueError("No line items could be identified in the OCR text")
+    printed_subtotal = summaries.get("printed_subtotal")
+    if printed_subtotal is not None and len(incomplete_table_indices) == 1:
+        incomplete_index = incomplete_table_indices[0]
+        known_subtotal = sum(
+            item.subtotal for index, item in enumerate(lines) if index != incomplete_index
+        )
+        recovered_total = printed_subtotal - known_subtotal
+        if recovered_total > 0:
+            incomplete_item = lines[incomplete_index]
+            incomplete_item.unit_price = recovered_total / incomplete_item.quantity
     if tax_components and summaries.get("printed_subtotal") is not None and summaries.get("printed_total") is not None:
         expected_tax = (
             summaries["printed_total"]
@@ -169,7 +184,7 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
         )
         corrected_components = [
             Decimal(str(component)[1:])
-            if currency == "INR" and str(component).split(".", 1)[0][:1] in "3456789"
+            if currency == "INR" and str(component).split(".", 1)[0][:1].isdigit()
             and len(str(component).split(".", 1)[0]) >= 3
             else component
             for component in tax_components
