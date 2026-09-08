@@ -34,17 +34,18 @@ def _amount(value: str) -> Decimal:
 
 def _table_amounts(raw_values: list[str], currency: str, quantity: Decimal) -> tuple[Decimal, Decimal]:
     values = [_amount(value) for value in raw_values]
-    candidates = [values]
-    if currency == "INR":
-        corrected = [
-            value[1:] if value.startswith("3") and len(value.split(".", 1)[0]) >= 3 else value
-            for value in raw_values
-        ]
-        candidates.insert(0, [_amount(value) for value in corrected])
-    for candidate in candidates:
-        if len(candidate) == 2 and quantity * candidate[0] == candidate[1]:
-            return candidate[0], candidate[1]
-    total = candidates[0][-1]
+    corrected = [
+        value[1:] if currency == "INR" and value[:1] in "3456789" and len(value.split(".", 1)[0]) >= 3 else value
+        for value in raw_values
+    ]
+    corrected_values = [_amount(value) for value in corrected]
+    if len(values) == 2 and quantity * values[0] == values[1]:
+        if values[0] >= Decimal("1000") and quantity * corrected_values[0] == corrected_values[1]:
+            return corrected_values[0], corrected_values[1]
+        return values[0], values[1]
+    if len(corrected_values) == 2 and quantity * corrected_values[0] == corrected_values[1]:
+        return corrected_values[0], corrected_values[1]
+    total = corrected_values[-1] if corrected_values[-1] != values[-1] else values[-1]
     return total / quantity, total
 
 
@@ -70,6 +71,7 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
     summaries: dict[str, Decimal | int] = {}
     lines: list[LineItem] = []
     confidence_fields: dict[str, FieldConfidence] = {}
+    tax_components: list[Decimal] = []
     currency = _currency(text)
     table_mode = False
 
@@ -85,7 +87,8 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
             if not tax_values:
                 continue
             tax_amount = _amount(tax_values[-1])
-            summaries["tax"] = summaries.get("tax", Decimal("0")) + tax_amount
+            tax_components.append(tax_amount)
+            summaries["tax"] = sum(tax_components, Decimal("0"))
             confidence_fields["tax"] = FieldConfidence(value=summaries["tax"], score=confidence)
             continue
 
@@ -157,4 +160,20 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
 
     if not lines:
         raise ValueError("No line items could be identified in the OCR text")
+    if tax_components and summaries.get("printed_subtotal") is not None and summaries.get("printed_total") is not None:
+        expected_tax = (
+            summaries["printed_total"]
+            - summaries["printed_subtotal"]
+            + summaries.get("discount", Decimal("0"))
+            - summaries.get("service_charge", Decimal("0"))
+        )
+        corrected_components = [
+            Decimal(str(component)[1:])
+            if currency == "INR" and str(component).split(".", 1)[0][:1] in "3456789"
+            and len(str(component).split(".", 1)[0]) >= 3
+            else component
+            for component in tax_components
+        ]
+        if sum(corrected_components, Decimal("0")) == expected_tax:
+            summaries["tax"] = expected_tax
     return Bill(currency=currency, line_items=lines, confidence=confidence_fields, **summaries)

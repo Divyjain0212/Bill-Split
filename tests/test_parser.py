@@ -91,3 +91,21 @@ def test_indian_ocr_merged_rupee_symbol_keeps_item_name_and_amount():
         ("Tea", Decimal("2"), Decimal("49.00"), Decimal("98.00")),
         ("Gulab Jamun", Decimal("2"), Decimal("89.00"), Decimal("178.00")),
     ]
+
+
+def test_indian_ocr_merged_tax_marker_reconciles_with_grand_total():
+    bill = parse_ocr_text(
+        "ITEM QTY UNIT TOTAL\n"
+        "1. Masala Dosa 1 7149.00 7149.00\n"
+        "2. Paneer Roll 1 7249.00 7249.00\n"
+        "3. Tea 2 749.00 798.00\n"
+        "4. Gulab Jamun 2 789.00 7178.00\n"
+        "SUBTOTAL 7674.00\n"
+        "CGST (2.5%) 316.85\n"
+        "SGST (2.5%) 316.85\n"
+        "GRAND TOTAL 7707.70"
+    )
+
+    assert bill.item_subtotal == Decimal("674.00")
+    assert bill.tax == Decimal("33.70")
+    assert bill.calculated_total == Decimal("707.70")
