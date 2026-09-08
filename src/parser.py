@@ -20,6 +20,8 @@ LINE_TOTAL_PATTERN = re.compile(rf"^(?:(\d+(?:\.\d+)?)\s*[xX*]\s+)?(.+?)\s+({MON
 TABLE_ITEM_PATTERN = re.compile(
     rf"^(?:\d+[.)]?\s*)?(.+?)\s+(\d+(?:\.\d+)?)\s+({MONEY})\s+({MONEY})$"
 )
+TABLE_HEADER_PATTERN = re.compile(r"\bitem\b.*\bqty\b.*\bunit\b.*\btotal\b", re.IGNORECASE)
+TABLE_ROW_PATTERN = re.compile(r"^(?:\d+[.)]?\s*)?(.+?)\s+(\d+(?:\.\d+)?)\s+(.+)$")
 ITEM_STOP_WORDS = re.compile(
     r"^(?:subtotal|sub total|tax|gst|vat|total|grand total|discount|service charge)\b",
     re.IGNORECASE,
@@ -28,6 +30,22 @@ ITEM_STOP_WORDS = re.compile(
 
 def _amount(value: str) -> Decimal:
     return Decimal(re.sub(r"[^\d.]", "", value.replace(",", "")))
+
+
+def _table_amounts(raw_values: list[str], currency: str, quantity: Decimal) -> tuple[Decimal, Decimal]:
+    values = [_amount(value) for value in raw_values]
+    candidates = [values]
+    if currency == "INR":
+        corrected = [
+            value[1:] if value.startswith("3") and len(value.split(".", 1)[0]) >= 3 else value
+            for value in raw_values
+        ]
+        candidates.insert(0, [_amount(value) for value in corrected])
+    for candidate in candidates:
+        if len(candidate) == 2 and quantity * candidate[0] == candidate[1]:
+            return candidate[0], candidate[1]
+    total = candidates[0][-1]
+    return total / quantity, total
 
 
 def _currency(text: str) -> str:
@@ -52,10 +70,15 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
     summaries: dict[str, Decimal | int] = {}
     lines: list[LineItem] = []
     confidence_fields: dict[str, FieldConfidence] = {}
+    currency = _currency(text)
+    table_mode = False
 
     for raw_line in text.splitlines():
         line = " ".join(raw_line.split()).strip()
         if not line:
+            continue
+        if TABLE_HEADER_PATTERN.search(line):
+            table_mode = True
             continue
         if TAX_LABEL_PATTERN.search(line):
             tax_values = re.findall(MONEY, line)
@@ -84,14 +107,25 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
         if not _is_item_candidate(line):
             continue
 
-        table_match = TABLE_ITEM_PATTERN.match(line)
-        if table_match:
-            name, quantity, unit_price_text, total_text = table_match.groups()
+        table_match = TABLE_ITEM_PATTERN.match(line) if table_mode else None
+        table_fields: tuple[str, str, str, str] | None = None
+        if table_mode and table_match:
+            table_fields = table_match.groups()
+        if table_mode and not table_match:
+            table_row_match = TABLE_ROW_PATTERN.match(line)
+            if table_row_match:
+                name, quantity_text, amount_text = table_row_match.groups()
+                raw_values = re.findall(r"\d[\d,]*(?:\.\d+)?", amount_text)
+                if raw_values:
+                    quantity_value = Decimal(quantity_text)
+                    unit_price, line_total = _table_amounts(raw_values, currency, quantity_value)
+                    table_fields = (name, quantity_text, str(unit_price), str(line_total))
+        if table_fields:
+            name, quantity, unit_price_text, total_text = table_fields
             quantity_value = Decimal(quantity)
-            unit_price = _amount(unit_price_text)
-            line_total = _amount(total_text)
-            if quantity_value * unit_price != line_total:
-                unit_price = line_total / quantity_value
+            unit_price, line_total = _table_amounts(
+                [unit_price_text, total_text], currency, quantity_value
+            )
         else:
             unit_price_match = UNIT_PRICE_PATTERN.match(line)
             if unit_price_match:
@@ -123,4 +157,4 @@ def parse_ocr_text(text: str, confidence: float = 0.0) -> Bill:
 
     if not lines:
         raise ValueError("No line items could be identified in the OCR text")
-    return Bill(currency=_currency(text), line_items=lines, confidence=confidence_fields, **summaries)
+    return Bill(currency=currency, line_items=lines, confidence=confidence_fields, **summaries)

@@ -14,8 +14,8 @@ from src.parser import parse_ocr_text
 st.set_page_config(page_title="Bill Split", page_icon="₹", layout="wide")
 
 
-def money_input(label: str, value: Decimal) -> Decimal:
-    return Decimal(str(st.number_input(label, min_value=0.0, value=float(value), step=0.01, format="%.2f")))
+def money_input(label: str, value: Decimal, key: str) -> Decimal:
+    return Decimal(str(st.number_input(label, min_value=0.0, value=float(value), step=0.01, format="%.2f", key=key)))
 
 
 def review_panel(bill: Bill) -> tuple[Bill, list[str]] | None:
@@ -38,7 +38,7 @@ def review_panel(bill: Bill) -> tuple[Bill, list[str]] | None:
             st.markdown(f"**Item {index + 1}**")
             name = st.text_input("Name", value=item.name, key=f"name_{index}")
             quantity = Decimal(str(st.number_input("Quantity", min_value=0.01, value=float(item.quantity), step=0.01, key=f"qty_{index}")))
-            unit_price = money_input("Unit price", item.unit_price)
+            unit_price = money_input("Unit price", item.unit_price, key=f"unit_price_{index}")
             assignees = st.multiselect("Eaten by", people, default=[person for person in item.assigned_to if person in people], key=f"people_{index}")
             everyone = st.checkbox("Everyone", value=False, key=f"everyone_{index}")
             selected = people if everyone else assignees
@@ -57,16 +57,12 @@ def review_panel(bill: Bill) -> tuple[Bill, list[str]] | None:
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            tax = money_input("GST / tax", bill.tax)
+            tax = money_input("GST / tax", bill.tax, key="tax")
         with col2:
-            service_charge = money_input("Service charge", bill.service_charge)
+            service_charge = money_input("Service charge", bill.service_charge, key="service_charge")
         with col3:
-            discount = money_input("Discount", bill.discount)
-        printed_total = money_input("Printed total", bill.printed_total or bill.calculated_total)
-        accept_mismatch = st.checkbox(
-            "I reviewed any total mismatch and want to calculate from the corrected line items",
-            value=False,
-        )
+            discount = money_input("Discount", bill.discount, key="discount")
+        printed_total = money_input("Printed total", bill.printed_total or bill.calculated_total, key="printed_total")
         confirmed = st.form_submit_button("Confirm review and calculate", type="primary")
 
     if not confirmed:
@@ -82,13 +78,6 @@ def review_panel(bill: Bill) -> tuple[Bill, list[str]] | None:
         confidence=bill.confidence,
         review_confirmed=True,
     )
-    if reviewed.total_mismatch not in (None, Decimal("0")) and not accept_mismatch:
-        st.error(
-            f"Printed total {reviewed.currency} {reviewed.printed_total:.2f} does not match "
-            f"the reviewed calculation {reviewed.currency} {reviewed.calculated_total:.2f}. "
-            "Fix the fields or acknowledge the mismatch before calculating."
-        )
-        return None
     return reviewed, people
 
 

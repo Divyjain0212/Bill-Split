@@ -70,3 +70,24 @@ def test_indian_table_receipt_parses_columns_and_combines_taxes():
     assert bill.tax == Decimal("23.26")
     assert bill.printed_total == Decimal("488.26")
     assert bill.total_mismatch == Decimal("0.00")
+
+
+def test_indian_ocr_merged_rupee_symbol_keeps_item_name_and_amount():
+    bill = parse_ocr_text(
+        "ITEM QTY UNIT TOTAL\n"
+        "1. Masala Dosa 1 3149.00 3149.00\n"
+        "2. Paneer Roll 1 3249.00 3249.00\n"
+        "3. Tea 2 349.00 398.00\n"
+        "4. Gulab Jamun 2 389.00 3178.00\n"
+        "SUBTOTAL 3674.00\n"
+        "CGST (2.5%) 316.85\n"
+        "SGST (2.5%) 316.85\n"
+        "GRAND TOTAL 3707.70"
+    )
+
+    assert [(item.name, item.quantity, item.unit_price, item.subtotal) for item in bill.line_items] == [
+        ("Masala Dosa", Decimal("1"), Decimal("149.00"), Decimal("149.00")),
+        ("Paneer Roll", Decimal("1"), Decimal("249.00"), Decimal("249.00")),
+        ("Tea", Decimal("2"), Decimal("49.00"), Decimal("98.00")),
+        ("Gulab Jamun", Decimal("2"), Decimal("89.00"), Decimal("178.00")),
+    ]

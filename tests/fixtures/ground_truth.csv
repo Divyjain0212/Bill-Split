@@ -1,0 +1,13 @@
+case_id,image_name,conditions,currency,item_count,subtotal,tax,service_charge,printed_total,total_is_wrong,notes
+bill-01,,normal,,,,,,,false,
+bill-02,,dim light,,,,,,,false,
+bill-03,,crumpled paper,,,,,,,false,
+bill-04,,steep angle,,,,,,,false,
+bill-05,,faded thermal print,,,,,,,false,
+bill-06,,handwriting,,,,,,,false,
+bill-07,,two scripts,,,,,,,false,
+bill-08,,long bill part 1 and part 2,,,,,,,false,
+bill-09,,normal,,,,,,,false,
+bill-10,,normal,,,,,,,false,
+bill-11,,normal,,,,,,,false,
+bill-12,,incorrect printed total,,,,,,,true,
