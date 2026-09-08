@@ -63,6 +63,10 @@ def review_panel(bill: Bill) -> tuple[Bill, list[str]] | None:
         with col3:
             discount = money_input("Discount", bill.discount)
         printed_total = money_input("Printed total", bill.printed_total or bill.calculated_total)
+        accept_mismatch = st.checkbox(
+            "I reviewed any total mismatch and want to calculate from the corrected line items",
+            value=False,
+        )
         confirmed = st.form_submit_button("Confirm review and calculate", type="primary")
 
     if not confirmed:
@@ -78,6 +82,13 @@ def review_panel(bill: Bill) -> tuple[Bill, list[str]] | None:
         confidence=bill.confidence,
         review_confirmed=True,
     )
+    if reviewed.total_mismatch not in (None, Decimal("0")) and not accept_mismatch:
+        st.error(
+            f"Printed total {reviewed.currency} {reviewed.printed_total:.2f} does not match "
+            f"the reviewed calculation {reviewed.currency} {reviewed.calculated_total:.2f}. "
+            "Fix the fields or acknowledge the mismatch before calculating."
+        )
+        return None
     return reviewed, people
 
 
@@ -111,6 +122,8 @@ if "bill" in st.session_state:
         st.session_state.bill = bill
         st.session_state.breakdown = calculate_breakdown(bill, people)
         st.session_state.people = people
+    elif "breakdown" in st.session_state:
+        st.session_state.pop("breakdown", None)
 
     if "breakdown" in st.session_state:
         bill = st.session_state.bill
