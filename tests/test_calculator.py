@@ -19,14 +19,14 @@ def reviewed_bill() -> Bill:
     )
 
 
-def test_tax_and_service_charge_follow_consumption():
+def test_tax_is_equal_and_service_charge_follows_consumption():
     shares = calculate_shares(reviewed_bill(), ["Asha", "Ben", "Cara", "Dev"])
 
     assert shares == {
-        "Asha": Decimal("379.50"),
-        "Ben": Decimal("379.50"),
-        "Cara": Decimal("126.50"),
-        "Dev": Decimal("34.50"),
+        "Asha": Decimal("366.50"),
+        "Ben": Decimal("366.50"),
+        "Cara": Decimal("135.50"),
+        "Dev": Decimal("51.50"),
     }
 
 
@@ -67,12 +67,12 @@ def test_receipt_style_assignment_allocates_tax_from_consumed_items():
 
     assert breakdown["Divy"] == {
         "subtotal": Decimal("40.75"),
-        "tax": Decimal("2.60"),
+        "tax": Decimal("1.90"),
         "service_charge": Decimal("0.00"),
         "discount": Decimal("0.00"),
-        "total": Decimal("43.35"),
+        "total": Decimal("42.65"),
     }
-    assert breakdown["Sanyam"]["tax"] == Decimal("1.20")
+    assert breakdown["Sanyam"]["tax"] == Decimal("1.90")
     assert bill.calculated_total == Decimal("63.30")
     assert bill.total_mismatch == Decimal("-12.00")
 

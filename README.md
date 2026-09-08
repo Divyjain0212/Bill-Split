@@ -5,7 +5,7 @@ Bill Split turns a bill photograph into a reviewed, structured bill and calculat
 ## Current milestone
 
 - Pydantic models for bills, line items, confidence, and assignments
-- Proportional allocation of tax and service charge based on assigned item subtotals
+- Equal allocation of tax and consumption-weighted service charge
 - Validation for incorrect printed totals
 - Focused calculator tests
 - Tesseract preprocessing and OCR text parsing

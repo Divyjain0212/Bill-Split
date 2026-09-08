@@ -115,7 +115,7 @@ if "bill" in st.session_state:
     if "breakdown" in st.session_state:
         bill = st.session_state.bill
         breakdown = st.session_state.breakdown
-        st.success("Review confirmed. The calculation uses consumption-weighted charges.")
+        st.success("Review confirmed. Tax is split equally; service charge follows consumption.")
         if bill.total_mismatch is not None and bill.total_mismatch != 0:
             st.warning(
                 f"Printed total: {bill.currency} {bill.printed_total:.2f}. "

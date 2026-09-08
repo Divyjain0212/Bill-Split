@@ -44,7 +44,8 @@ def calculate_breakdown(bill: Bill, people: list[str]) -> dict[str, dict[str, De
 
     proportions = {person: base_by_person[person] / assigned_subtotal for person in people}
     base = _allocate(base_by_person, assigned_subtotal, people)
-    tax = _allocate({person: bill.tax * proportions[person] for person in people}, bill.tax, people)
+    equal_tax = bill.tax / len(people)
+    tax = _allocate({person: equal_tax for person in people}, bill.tax, people)
     service_charge = _allocate(
         {person: bill.service_charge * proportions[person] for person in people},
         bill.service_charge,
