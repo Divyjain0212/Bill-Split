@@ -18,14 +18,14 @@ def money_input(label: str, value: Decimal, key: str) -> Decimal:
     return Decimal(str(st.number_input(label, min_value=0.0, value=float(value), step=0.01, format="%.2f", key=key)))
 
 
-def review_panel(bill: Bill) -> tuple[Bill, list[str]] | None:
+def review_panel(bill: Bill, extraction_id: int) -> tuple[Bill, list[str]] | None:
     st.subheader("Review extracted bill")
     st.caption("Correct OCR fields and assign every item before confirming the bill.")
     detected_people = bill.guest_count or 2
     guest_count = int(st.number_input("Number of people", min_value=1, value=detected_people, step=1))
     st.info(f"Receipt indicates {bill.guest_count or 'an unknown number of'} guest(s). Enter the names below.")
     people = [
-        st.text_input(f"Person {index + 1} name", value=f"Person {index + 1}", key=f"member_{index}").strip()
+        st.text_input(f"Person {index + 1} name", value=f"Person {index + 1}", key=f"member_{extraction_id}_{index}").strip()
         for index in range(guest_count)
     ]
     if any(not name for name in people) or len(set(people)) != len(people):
@@ -36,11 +36,11 @@ def review_panel(bill: Bill) -> tuple[Bill, list[str]] | None:
         edited_items: list[LineItem] = []
         for index, item in enumerate(bill.line_items):
             st.markdown(f"**Item {index + 1}**")
-            name = st.text_input("Name", value=item.name, key=f"name_{index}")
-            quantity = Decimal(str(st.number_input("Quantity", min_value=0.01, value=float(item.quantity), step=0.01, key=f"qty_{index}")))
-            unit_price = money_input("Unit price", item.unit_price, key=f"unit_price_{index}")
-            assignees = st.multiselect("Eaten by", people, default=[person for person in item.assigned_to if person in people], key=f"people_{index}")
-            everyone = st.checkbox("Everyone", value=False, key=f"everyone_{index}")
+            name = st.text_input("Name", value=item.name, key=f"name_{extraction_id}_{index}")
+            quantity = Decimal(str(st.number_input("Quantity", min_value=0.01, value=float(item.quantity), step=0.01, key=f"qty_{extraction_id}_{index}")))
+            unit_price = money_input("Unit price", item.unit_price, key=f"unit_price_{extraction_id}_{index}")
+            assignees = st.multiselect("Eaten by", people, default=[person for person in item.assigned_to if person in people], key=f"people_{extraction_id}_{index}")
+            everyone = st.checkbox("Everyone", value=False, key=f"everyone_{extraction_id}_{index}")
             selected = people if everyone else assignees
             if not selected:
                 st.error("Assign this item to one or more members.")
@@ -87,6 +87,7 @@ uploaded = st.file_uploader("Upload a bill photograph", type=["jpg", "jpeg", "pn
 if st.button("Clear current extraction"):
     for key in ("bill", "raw_ocr", "breakdown", "people"):
         st.session_state.pop(key, None)
+    st.session_state.extraction_id = st.session_state.get("extraction_id", 0) + 1
     st.rerun()
 
 if uploaded and st.button("Read / replace bill", type="primary"):
@@ -99,13 +100,14 @@ if uploaded and st.button("Read / replace bill", type="primary"):
         st.session_state.bill = parse_ocr_text(text, confidence)
         st.session_state.raw_ocr = text
         st.session_state.pop("breakdown", None)
+        st.session_state.extraction_id = st.session_state.get("extraction_id", 0) + 1
     except (FileNotFoundError, ValueError) as error:
         st.error(str(error))
 
 if "bill" in st.session_state:
     with st.expander("Raw OCR text"):
         st.text(st.session_state.raw_ocr)
-    reviewed_result = review_panel(st.session_state.bill)
+    reviewed_result = review_panel(st.session_state.bill, st.session_state.get("extraction_id", 0))
     if reviewed_result:
         bill, people = reviewed_result
         st.session_state.bill = bill
